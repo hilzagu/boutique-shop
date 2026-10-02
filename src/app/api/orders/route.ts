@@ -4,15 +4,26 @@ import { authOptions } from "@/lib/auth";
 import { createOrder, updateOrderStatus } from "@/lib/orders";
 import { sendOrderConfirmationEmail, logEmailToDatabase } from "@/lib/mailgun";
 import { supabaseAdmin } from "@/lib/supabase";
+import { verifyTransaction } from "@/lib/paystack";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { paymentIntentId, items, shipping, subtotalCents, shippingCents, taxCents, totalCents } = body;
+    const { reference, items, shipping, subtotalCents, shippingCents, taxCents, totalCents } = body;
+
+    // Verify the Paystack transaction
+    const verification = await verifyTransaction(reference);
+
+    if (!verification.status || verification.data.status !== "success") {
+      return NextResponse.json(
+        { error: "Payment verification failed" },
+        { status: 400 }
+      );
+    }
 
     // Get session (user may be guest or logged in)
     const session = await getServerSession(authOptions);
-    const userId = session?.user?.id as string | null;
+    const userId = (session?.user as any)?.id || null;
 
     // Create order in database
     const order = await createOrder({
@@ -39,7 +50,7 @@ export async function POST(req: NextRequest) {
       shippingCents,
       taxCents,
       totalCents,
-      stripePaymentIntentId: paymentIntentId,
+      stripePaymentIntentId: reference,
     });
 
     // Update order status to paid

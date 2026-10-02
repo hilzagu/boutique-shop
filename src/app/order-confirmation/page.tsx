@@ -1,4 +1,6 @@
 import { getOrderById } from "@/lib/orders";
+import { verifyTransaction } from "@/lib/paystack";
+import { supabaseAdmin } from "@/lib/supabase";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -7,13 +9,79 @@ export const dynamic = "force-dynamic";
 async function OrderConfirmationPage({
   searchParams,
 }: {
-  searchParams: { orderId?: string };
+  searchParams: { reference?: string; orderId?: string };
 }) {
+  // Handle Paystack callback (reference-based)
+  if (searchParams.reference && !searchParams.orderId) {
+    const verification = await verifyTransaction(searchParams.reference);
+
+    if (!verification.status || verification.data.status !== "success") {
+      return (
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+          <h1 className="text-3xl font-light mb-2">Payment Failed</h1>
+          <p className="text-gray-500 mb-8">
+            Your payment could not be processed. Please try again.
+          </p>
+          <Link
+            href="/"
+            className="inline-block bg-gray-900 text-white px-8 py-3 text-sm font-medium hover:bg-gray-800 transition"
+          >
+            Back to Shop
+          </Link>
+        </div>
+      );
+    }
+
+    // Payment successful - find order by reference
+    const { data: order, error } = await supabaseAdmin
+      .from("orders")
+      .select("*")
+      .eq("stripe_payment_intent_id", searchParams.reference)
+      .single();
+
+    if (error || !order) {
+      return (
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
+          <h1 className="text-3xl font-light mb-2">Order Not Found</h1>
+          <p className="text-gray-500 mb-8">
+            We couldn&apos;t find your order. Please contact support.
+          </p>
+          <Link
+            href="/"
+            className="inline-block bg-gray-900 text-white px-8 py-3 text-sm font-medium hover:bg-gray-800 transition"
+          >
+            Back to Shop
+          </Link>
+        </div>
+      );
+    }
+
+    // Fetch order items
+    const { data: orderItems } = await supabaseAdmin
+      .from("order_items")
+      .select("*")
+      .eq("order_id", order.id);
+
+    return (
+      <OrderConfirmationView order={order} items={orderItems || []} />
+    );
+  }
+
+  // Handle direct order ID access
   if (!searchParams.orderId) notFound();
 
   const order = await getOrderById(searchParams.orderId);
   if (!order) notFound();
 
+  return <OrderConfirmationView order={order} items={order.items} />;
+}
+
+function OrderConfirmationView({ order, items }: { order: any; items: any[] }) {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
       <div className="text-center mb-12">
@@ -37,7 +105,7 @@ async function OrderConfirmationPage({
           </div>
           <div className="text-right">
             <p className="text-sm text-gray-500">Status</p>
-            <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full capitalize">
+            <span className="inline-block px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full capitalize">
               {order.status}
             </span>
           </div>
@@ -46,7 +114,7 @@ async function OrderConfirmationPage({
         <div className="border-t border-gray-200 pt-6">
           <h2 className="font-medium mb-4">Items</h2>
           <div className="space-y-4">
-            {order.items.map((item: any) => (
+            {items.map((item: any) => (
               <div key={item.id} className="flex justify-between">
                 <div>
                   <p className="font-medium text-sm">{item.product_name}</p>

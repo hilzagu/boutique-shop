@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function CheckoutPage() {
-  const { items, subtotalCents, clearCart } = useCart();
+  const { items, subtotalCents } = useCart();
   const { data: session } = useSession();
   const router = useRouter();
 
@@ -24,18 +24,12 @@ export default function CheckoutPage() {
     state: "",
     zip: "",
     country: "US",
-    cardNumber: "",
-    cardExpiry: "",
-    cardCvc: "",
-    cardName: "",
   });
 
   // Calculate shipping and tax
   useEffect(() => {
-    // Free shipping over $150, otherwise $8.99
     const shipping = subtotalCents >= 15000 ? 0 : 899;
     setShippingCost(shipping);
-    // 8% tax
     setTax(Math.round(subtotalCents * 0.08));
   }, [subtotalCents]);
 
@@ -51,8 +45,8 @@ export default function CheckoutPage() {
     setError("");
 
     try {
-      // Create payment intent
-      const paymentRes = await fetch("/api/checkout", {
+      // Initialize Paystack transaction
+      const response = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -65,75 +59,20 @@ export default function CheckoutPage() {
         }),
       });
 
-      const paymentData = await paymentRes.json();
+      const data = await response.json();
 
-      if (!paymentRes.ok) {
-        throw new Error(paymentData.error || "Payment failed");
+      if (!response.ok) {
+        throw new Error(data.error || "Payment initialization failed");
       }
 
-      // Confirm payment with Stripe
-      const { loadStripe } = await import("@stripe/stripe-js");
-      const stripe = await loadStripe(
-        process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
-      );
-
-      if (!stripe) throw new Error("Stripe failed to load");
-
-      const { error: stripeError } = await stripe.confirmCardPayment(
-        paymentData.clientSecret,
-        {
-          payment_method: {
-            card: {
-              number: form.cardNumber,
-              exp_month: parseInt(form.cardExpiry.split("/")[0]),
-              exp_year: parseInt("20" + form.cardExpiry.split("/")[1]),
-              cvc: form.cardCvc,
-            },
-            billing_details: {
-              name: form.cardName,
-              email: form.email,
-              address: {
-                line1: form.address,
-                city: form.city,
-                state: form.state,
-                postal_code: form.zip,
-                country: form.country,
-              },
-            },
-          },
-        }
-      );
-
-      if (stripeError) {
-        throw new Error(stripeError.message || "Payment failed");
+      // Redirect to Paystack payment page
+      if (data.authorizationUrl) {
+        window.location.href = data.authorizationUrl;
+      } else {
+        throw new Error("No payment URL received");
       }
-
-      // Payment successful - confirm order
-      const confirmRes = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paymentIntentId: paymentData.paymentIntentId,
-          items,
-          shipping: form,
-          subtotalCents,
-          shippingCents: shippingCost,
-          taxCents: tax,
-          totalCents,
-        }),
-      });
-
-      const confirmData = await confirmRes.json();
-
-      if (!confirmRes.ok) {
-        throw new Error(confirmData.error || "Order confirmation failed");
-      }
-
-      clearCart();
-      router.push(`/order-confirmation?orderId=${confirmData.orderId}`);
     } catch (err: any) {
       setError(err.message || "Something went wrong");
-    } finally {
       setLoading(false);
     }
   };
@@ -244,67 +183,12 @@ export default function CheckoutPage() {
                   className="w-full border border-gray-300 rounded px-4 py-2 text-sm focus:outline-none focus:border-gray-900"
                 >
                   <option value="US">United States</option>
-                  <option value="CA">Canada</option>
+                  <option value="NG">Nigeria</option>
+                  <option value="GH">Ghana</option>
+                  <option value="KE">Kenya</option>
+                  <option value="ZA">South Africa</option>
                   <option value="GB">United Kingdom</option>
-                  <option value="AU">Australia</option>
                 </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Payment */}
-          <div>
-            <h2 className="text-lg font-medium mb-4">Payment</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-sm text-gray-600 mb-1">Card Number</label>
-                <input
-                  type="text"
-                  name="cardNumber"
-                  value={form.cardNumber}
-                  onChange={handleChange}
-                  placeholder="4242 4242 4242 4242"
-                  maxLength={19}
-                  required
-                  className="w-full border border-gray-300 rounded px-4 py-2 text-sm focus:outline-none focus:border-gray-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Expiry (MM/YY)</label>
-                <input
-                  type="text"
-                  name="cardExpiry"
-                  value={form.cardExpiry}
-                  onChange={handleChange}
-                  placeholder="12/25"
-                  maxLength={5}
-                  required
-                  className="w-full border border-gray-300 rounded px-4 py-2 text-sm focus:outline-none focus:border-gray-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">CVC</label>
-                <input
-                  type="text"
-                  name="cardCvc"
-                  value={form.cardCvc}
-                  onChange={handleChange}
-                  placeholder="123"
-                  maxLength={4}
-                  required
-                  className="w-full border border-gray-300 rounded px-4 py-2 text-sm focus:outline-none focus:border-gray-900"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm text-gray-600 mb-1">Name on Card</label>
-                <input
-                  type="text"
-                  name="cardName"
-                  value={form.cardName}
-                  onChange={handleChange}
-                  required
-                  className="w-full border border-gray-300 rounded px-4 py-2 text-sm focus:outline-none focus:border-gray-900"
-                />
               </div>
             </div>
           </div>
@@ -362,11 +246,11 @@ export default function CheckoutPage() {
               disabled={loading}
               className="w-full bg-gray-900 text-white py-4 text-sm font-medium hover:bg-gray-800 transition mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Processing..." : `Pay $${(totalCents / 100).toFixed(2)}`}
+              {loading ? "Processing..." : `Pay $${(totalCents / 100).toFixed(2)} with Paystack`}
             </button>
 
             <p className="text-xs text-gray-400 text-center mt-3">
-              This is a demo checkout. Use Stripe test card: 4242 4242 4242 4242
+              You will be redirected to Paystack to complete your payment securely.
             </p>
           </div>
         </div>
