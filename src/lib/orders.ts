@@ -122,7 +122,7 @@ export async function getOrderByNumber(orderNumber: string) {
   const { data: items, error: itemsError } = await supabaseAdmin
     .from("order_items")
     .select("*")
-    .eq("order_id", orderId);
+    .eq("order_id", order.id);
 
   return { ...order, items: items || [] };
 }
