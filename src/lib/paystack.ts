@@ -1,8 +1,5 @@
-import Paystack from "paystack";
-
-const paystack = Paystack(process.env.PAYSTACK_SECRET_KEY!);
-
-export default paystack;
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
+const PAYSTACK_API_URL = "https://api.paystack.co";
 
 export interface CartItem {
   productId: string;
@@ -14,16 +11,25 @@ export interface CartItem {
   unitPriceCents: number;
 }
 
-// Promisify Paystack's callback-based API
-function promisifyPaystack<T = any>(
-  fn: (callback: (err: any, result: any) => void) => void
-): Promise<T> {
-  return new Promise((resolve, reject) => {
-    fn((err, result) => {
-      if (err) reject(err);
-      else resolve(result);
-    });
-  });
+interface PaystackResponse<T = any> {
+  status: boolean;
+  message: string;
+  data: T;
+}
+
+interface TransactionInitializeData {
+  authorization_url: string;
+  access_code: string;
+  reference: string;
+}
+
+interface TransactionVerifyData {
+  status: string;
+  reference: string;
+  amount: number;
+  customer: {
+    email: string;
+  };
 }
 
 export async function initializeTransaction(params: {
@@ -32,16 +38,37 @@ export async function initializeTransaction(params: {
   reference: string;
   metadata?: Record<string, string>;
   callbackUrl?: string;
-}) {
-  return promisifyPaystack((callback) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (paystack.transaction.initialize as any)(params, callback);
+}): Promise<PaystackResponse<TransactionInitializeData>> {
+  const response = await fetch(`${PAYSTACK_API_URL}/transaction/initialize`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: params.email,
+      amount: params.amount,
+      reference: params.reference,
+      metadata: params.metadata,
+      callback_url: params.callbackUrl,
+    }),
   });
+
+  return response.json();
 }
 
-export async function verifyTransaction(reference: string) {
-  return promisifyPaystack((callback) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (paystack.transaction.verify as any)(reference, callback);
-  });
+export async function verifyTransaction(
+  reference: string
+): Promise<PaystackResponse<TransactionVerifyData>> {
+  const response = await fetch(
+    `${PAYSTACK_API_URL}/transaction/verify/${reference}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+      },
+    }
+  );
+
+  return response.json();
 }
