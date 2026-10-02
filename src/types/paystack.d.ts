@@ -28,9 +28,9 @@ declare module "paystack" {
         reference?: string;
         metadata?: Record<string, string>;
         callback_url?: string;
-      }): Promise<PaystackResponse<TransactionInitializeData>>;
+      }, callback: (err: any, result: any) => void): void;
 
-      verify(reference: string): Promise<PaystackResponse<TransactionVerifyData>>;
+      verify(reference: string, callback: (err: any, result: any) => void): void;
     };
   }
 

@@ -14,24 +14,34 @@ export interface CartItem {
   unitPriceCents: number;
 }
 
-// Paystack uses kobo (1 NGN = 100 kobo), but we'll treat amounts as-is
-// since the user can configure their Paystack account currency
+// Promisify Paystack's callback-based API
+function promisifyPaystack<T = any>(
+  fn: (callback: (err: any, result: any) => void) => void
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    fn((err, result) => {
+      if (err) reject(err);
+      else resolve(result);
+    });
+  });
+}
+
 export async function initializeTransaction(params: {
   email: string;
-  amount: number; // in kobo/cents
+  amount: number;
   reference: string;
-  metadata: Record<string, string>;
-  callbackUrl: string;
+  metadata?: Record<string, string>;
+  callbackUrl?: string;
 }) {
-  return paystack.transaction.initialize({
-    email: params.email,
-    amount: params.amount,
-    reference: params.reference,
-    metadata: params.metadata,
-    callback_url: params.callbackUrl,
+  return promisifyPaystack((callback) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (paystack.transaction.initialize as any)(params, callback);
   });
 }
 
 export async function verifyTransaction(reference: string) {
-  return paystack.transaction.verify(reference);
+  return promisifyPaystack((callback) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (paystack.transaction.verify as any)(reference, callback);
+  });
 }
