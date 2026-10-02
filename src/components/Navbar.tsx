@@ -11,18 +11,21 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <nav className="bg-white border-b border-gray-100 sticky top-0 z-40">
+    <nav className="bg-white/95 backdrop-blur-sm border-b border-gray-100 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link href="/" className="text-2xl font-light tracking-widest text-gray-900 uppercase">
-            Boutique
+          <Link href="/" className="text-xl font-bold tracking-tight text-gray-900">
+            Stride
           </Link>
 
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-8">
-            <Link href="/" className="text-sm text-gray-600 hover:text-gray-900 transition">
-              Shop All
+            <Link href="/" className="text-sm font-medium text-gray-900 hover:text-blue-500 transition">
+              Product
+            </Link>
+            <Link href="/?category=new" className="text-sm text-gray-600 hover:text-gray-900 transition">
+              New Arrival
             </Link>
             <Link href="/?category=dresses" className="text-sm text-gray-600 hover:text-gray-900 transition">
               Dresses
@@ -40,6 +43,13 @@ export default function Navbar() {
 
           {/* Right side */}
           <div className="flex items-center gap-4">
+            {/* Search */}
+            <button className="p-2 text-gray-600 hover:text-gray-900 transition hidden md:block">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+
             {/* Auth */}
             {session ? (
               <div className="hidden md:flex items-center gap-3">
@@ -70,11 +80,11 @@ export default function Navbar() {
 
             {/* Cart */}
             <button onClick={toggleCart} className="relative p-2 text-gray-600 hover:text-gray-900 transition">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
               </svg>
               {totalItems > 0 && (
-                <span className="absolute -top-1 -right-1 bg-brand-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
                   {totalItems}
                 </span>
               )}
@@ -96,7 +106,8 @@ export default function Navbar() {
         {mobileOpen && (
           <div className="md:hidden pb-4 border-t border-gray-100 pt-4">
             <div className="flex flex-col gap-3">
-              <Link href="/" onClick={() => setMobileOpen(false)} className="text-sm text-gray-600">Shop All</Link>
+              <Link href="/" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-gray-900">Product</Link>
+              <Link href="/?category=new" onClick={() => setMobileOpen(false)} className="text-sm text-gray-600">New Arrival</Link>
               <Link href="/?category=dresses" onClick={() => setMobileOpen(false)} className="text-sm text-gray-600">Dresses</Link>
               <Link href="/?category=tops" onClick={() => setMobileOpen(false)} className="text-sm text-gray-600">Tops</Link>
               <Link href="/?category=bottoms" onClick={() => setMobileOpen(false)} className="text-sm text-gray-600">Bottoms</Link>

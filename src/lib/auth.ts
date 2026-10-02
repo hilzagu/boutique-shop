@@ -13,11 +13,9 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user, account }) {
-      // You can add custom logic here (e.g., create user profile in DB)
       return true;
     },
     async session({ session, token }) {
-      // Attach user ID to session
       if (session.user) {
         (session.user as any).id = token.sub;
       }
@@ -25,4 +23,5 @@ export const authOptions: NextAuthOptions = {
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
+  trustHost: true,
 };
