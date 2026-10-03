@@ -1,44 +1,40 @@
-"use client";
-
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { supabase } from "@/lib/supabase";
-import { useSession } from "next-auth/react";
+import { supabase, subscribeToCartUpdates } from "@/lib/supabase";
+import { useAuth } from "./AuthContext";
 
 export interface CartItem {
   id: string;
   product_id: string;
-  slug: string;
-  name: string;
-  image: string | null;
+  product_name: string;
+  product_image: string | null;
   size: string;
   color: string;
   quantity: number;
-  unitPriceCents: number;
+  unit_price_cents: number;
+  user_id: string;
 }
 
 interface CartContextType {
   items: CartItem[];
   loading: boolean;
-  addItem: (item: Omit<CartItem, "id">) => Promise<void>;
+  addItem: (item: Omit<CartItem, "id" | "user_id">) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
   updateQuantity: (id: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
   totalItems: number;
   subtotalCents: number;
-  isOpen: boolean;
-  toggleCart: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  const { data: session } = useSession();
+  const { user } = useAuth();
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isOpen, setIsOpen] = useState(false);
 
+  // Fetch cart items
   const fetchCart = useCallback(async () => {
-    if (!session?.user) {
+    if (!user) {
       setItems([]);
       setLoading(false);
       return;
@@ -47,59 +43,35 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase
       .from("cart_items")
       .select("*")
-      .eq("user_id", (session.user as any).id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      setItems(
-        data.map((item: any) => ({
-          id: item.id,
-          product_id: item.product_id,
-          slug: item.product_id,
-          name: item.product_name,
-          image: item.product_image,
-          size: item.size,
-          color: item.color,
-          quantity: item.quantity,
-          unitPriceCents: item.unit_price_cents,
-        }))
-      );
+      setItems(data);
     }
     setLoading(false);
-  }, [session]);
+  }, [user]);
 
+  // Initial fetch
   useEffect(() => {
     fetchCart();
   }, [fetchCart]);
 
   // Real-time sync
   useEffect(() => {
-    if (!session?.user) return;
+    if (!user) return;
 
-    const channel = supabase
-      .channel("cart-sync")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "cart_items",
-          filter: `user_id=eq.${(session.user as any).id}`,
-        },
-        () => {
-          fetchCart();
-        }
-      )
-      .subscribe();
+    const unsubscribe = subscribeToCartUpdates(user.id, () => {
+      fetchCart();
+    });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session, fetchCart]);
+    return unsubscribe;
+  }, [user, fetchCart]);
 
-  const addItem = async (item: Omit<CartItem, "id">) => {
-    if (!session?.user) throw new Error("Must be logged in");
+  const addItem = async (item: Omit<CartItem, "id" | "user_id">) => {
+    if (!user) throw new Error("Must be logged in");
 
+    // Check if item already exists
     const existing = items.find(
       (i) =>
         i.product_id === item.product_id &&
@@ -108,22 +80,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     );
 
     if (existing) {
+      // Update quantity
       const { error } = await supabase
         .from("cart_items")
         .update({ quantity: existing.quantity + item.quantity })
         .eq("id", existing.id);
+
       if (error) throw error;
     } else {
+      // Insert new item
       const { error } = await supabase.from("cart_items").insert({
-        user_id: (session.user as any).id,
-        product_id: item.product_id,
-        product_name: item.name,
-        product_image: item.image,
-        size: item.size,
-        color: item.color,
-        quantity: item.quantity,
-        unit_price_cents: item.unitPriceCents,
+        ...item,
+        user_id: user.id,
       });
+
       if (error) throw error;
     }
   };
@@ -143,18 +113,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const clearCart = async () => {
-    if (!session?.user) return;
+    if (!user) return;
     const { error } = await supabase
       .from("cart_items")
       .delete()
-      .eq("user_id", (session.user as any).id);
+      .eq("user_id", user.id);
     if (error) throw error;
   };
 
-  const toggleCart = () => setIsOpen(!isOpen);
-
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
-  const subtotalCents = items.reduce((sum, i) => sum + i.quantity * i.unitPriceCents, 0);
+  const subtotalCents = items.reduce((sum, i) => sum + i.quantity * i.unit_price_cents, 0);
 
   return (
     <CartContext.Provider
@@ -167,8 +135,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         clearCart,
         totalItems,
         subtotalCents,
-        isOpen,
-        toggleCart,
       }}
     >
       {children}
