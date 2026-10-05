@@ -41,6 +41,12 @@ export async function POST(req: NextRequest) {
           break;
         }
 
+        // Skip if already handled (e.g. order-confirmation page already
+        // marked it paid and sent the email) to avoid duplicates.
+        if (orders.status === "paid") {
+          break;
+        }
+
         await updateOrderStatus(orders.id, "paid", event.data.id?.toString());
 
         // Fetch order items and send email

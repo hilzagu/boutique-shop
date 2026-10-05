@@ -1,5 +1,6 @@
-import { getOrderById } from "@/lib/orders";
+import { getOrderById, updateOrderStatus } from "@/lib/orders";
 import { verifyTransaction } from "@/lib/paystack";
+import { sendOrderConfirmationEmail, logEmailToDatabase } from "@/lib/mailgun";
 import { supabaseAdmin } from "@/lib/supabase";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -67,8 +68,51 @@ async function OrderConfirmationPage({
       .select("*")
       .eq("order_id", order.id);
 
+    const items = orderItems || [];
+
+    // Mark the order as paid (if not already) and send the confirmation email
+    if (order.status !== "paid") {
+      await updateOrderStatus(order.id, "paid");
+
+      const emailResult = await sendOrderConfirmationEmail({
+        orderNumber: order.order_number,
+        customerName: order.user_name,
+        customerEmail: order.user_email,
+        items: items.map((item: any) => ({
+          name: item.product_name,
+          size: item.size,
+          color: item.color,
+          quantity: item.quantity,
+          price: item.total_price_cents,
+        })),
+        subtotal: order.subtotal_cents,
+        shipping: order.shipping_cents,
+        tax: order.tax_cents,
+        total: order.total_cents,
+        shippingAddress: {
+          name: order.shipping_name,
+          address: order.shipping_address,
+          city: order.shipping_city,
+          state: order.shipping_state,
+          zip: order.shipping_zip,
+          country: order.shipping_country,
+        },
+      });
+
+      await logEmailToDatabase(supabaseAdmin, {
+        orderId: order.id,
+        toEmail: order.user_email,
+        subject: `Order Confirmation #${order.order_number}`,
+        template: "order_confirmation",
+        status: emailResult.success ? "sent" : "failed",
+        mailgunMessageId: emailResult.messageId,
+      });
+
+      order.status = "paid";
+    }
+
     return (
-      <OrderConfirmationView order={order} items={orderItems || []} />
+      <OrderConfirmationView order={order} items={items} />
     );
   }
 
